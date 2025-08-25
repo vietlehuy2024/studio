@@ -26,7 +26,7 @@ type Filters = {
 };
 
 export default function DataViewerPage() {
-  const [url, setUrl] = useState("https://report-flame.vercel.app/omo_cashflow.json");
+  const [url, setUrl] = useState("https://report-flame.vercel.app/test.json");
   const [data, setData] = useState<OmoCashflowData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
