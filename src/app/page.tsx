@@ -13,7 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { Calendar as CalendarIcon, Search, LineChart, AlertCircle, FileJson } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -45,18 +45,43 @@ export default function DataViewerPage() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const jsonData = await response.json();
-      // Assuming the data is an array of objects
+      
+      let rawData: any[] = [];
       if (Array.isArray(jsonData)) {
-        setData(jsonData);
+        rawData = jsonData;
       } else {
-        // Handle cases where data is nested, e.g. { "data": [...] }
         const dataKey = Object.keys(jsonData).find(key => Array.isArray(jsonData[key]));
-        if(dataKey) {
-            setData(jsonData[dataKey]);
+        if (dataKey) {
+            rawData = jsonData[dataKey];
         } else {
             throw new Error("No array found in JSON data");
         }
       }
+
+      // Data cleaning and validation
+      const cleanedData = rawData.map(item => {
+        const newItem: { [key: string]: any } = {};
+        for (const key in item) {
+          if (key === 'date') {
+             try {
+               // Make sure date is a valid ISO string
+               newItem[key] = parseISO(item[key]).toISOString();
+             } catch (e) {
+               console.warn(`Invalid date format for value: ${item[key]}`);
+               // Skip this record or handle error appropriately
+               return null; 
+             }
+          } else {
+            const value = parseFloat(item[key]);
+            newItem[key] = isNaN(value) ? null : value;
+          }
+        }
+        return newItem as OmoCashflowData;
+      }).filter(item => item !== null);
+
+
+      setData(cleanedData as OmoCashflowData[]);
+
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : "An unknown error occurred";
       setError(errorMessage);
@@ -93,9 +118,15 @@ export default function DataViewerPage() {
     // Filtering logic
     if (activeFilters.dateFrom || activeFilters.dateTo || activeFilters.query) {
       processData = processData.filter((item) => {
-        const itemDate = new Date(item.date);
-        if (activeFilters.dateFrom && itemDate < activeFilters.dateFrom) return false;
-        if (activeFilters.dateTo && itemDate > activeFilters.dateTo) return false;
+        try {
+          const itemDate = parseISO(item.date);
+          if (activeFilters.dateFrom && itemDate < activeFilters.dateFrom) return false;
+          if (activeFilters.dateTo && itemDate > activeFilters.dateTo) return false;
+        } catch (e) {
+            console.warn(`Could not parse date for filtering: ${item.date}`);
+            return false;
+        }
+
         if (activeFilters.query) {
           const lowerCaseQuery = activeFilters.query.toLowerCase();
           return Object.values(item).some(val =>
@@ -115,6 +146,16 @@ export default function DataViewerPage() {
         if (aValue === null || aValue === undefined) return 1;
         if (bValue === null || bValue === undefined) return -1;
         
+        if (sortConfig.key === 'date') {
+             try {
+                const dateA = parseISO(aValue as string).getTime();
+                const dateB = parseISO(bValue as string).getTime();
+                return sortConfig.direction === "ascending" ? dateA - dateB : dateB - dateA;
+             } catch(e) {
+                return 0;
+             }
+        }
+
         if (aValue < bValue) {
           return sortConfig.direction === "ascending" ? -1 : 1;
         }

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import type { OmoCashflowData } from '@/types';
@@ -24,24 +24,33 @@ export function DataChart({ data }: DataChartProps) {
     if (data.length === 0) {
       return [];
     }
-    const firstItem = data[0];
-    return Object.keys(firstItem).filter(
-      (key) => key !== 'date' && typeof firstItem[key as keyof OmoCashflowData] === 'number'
-    ) as (keyof OmoCashflowData)[];
+    const keys = new Set<string>();
+    data.forEach(item => {
+      Object.keys(item).forEach(key => {
+        if (key !== 'date' && typeof (item as any)[key] === 'number') {
+          keys.add(key);
+        }
+      });
+    });
+    return Array.from(keys);
   }, [data]);
 
   useEffect(() => {
-    if (chartableKeys.length > 0 && !selectedKey) {
+    if (chartableKeys.length > 0 && (!selectedKey || !chartableKeys.includes(selectedKey))) {
       setSelectedKey(chartableKeys[0]);
+    } else if (chartableKeys.length === 0) {
+      setSelectedKey('');
     }
   }, [chartableKeys, selectedKey]);
 
   const chartData = useMemo(() => {
     if (!selectedKey) return [];
-    return data.map(item => ({
-      date: item.date,
-      value: item[selectedKey as keyof OmoCashflowData]
-    })).reverse(); // Reverse for chronological order if data is descending by date
+    return data
+      .map(item => ({
+        date: item.date,
+        value: item[selectedKey as keyof OmoCashflowData]
+      }))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [data, selectedKey]);
 
   const handleGenerateDescription = async () => {
@@ -66,7 +75,7 @@ export function DataChart({ data }: DataChartProps) {
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">Metric:</span>
-          <Select value={selectedKey} onValueChange={(value) => setSelectedKey(value)}>
+          <Select value={selectedKey} onValueChange={(value) => setSelectedKey(value)} disabled={chartableKeys.length === 0}>
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="Select a metric" />
             </SelectTrigger>
@@ -84,6 +93,7 @@ export function DataChart({ data }: DataChartProps) {
       </div>
       
       <div className="w-full h-96">
+       {chartData.length > 0 ? (
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={chartData}
@@ -91,9 +101,12 @@ export function DataChart({ data }: DataChartProps) {
           >
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(str) => {
-              const date = new Date(str);
-              if (isNaN(date.getTime())) return str;
-              return format(date, "MMM yy");
+              try {
+                const date = parseISO(str);
+                return format(date, "MMM yy");
+              } catch (e) {
+                return str;
+              }
             }}/>
             <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(value) => typeof value === 'number' ? value.toLocaleString() : value}/>
             <Tooltip
@@ -103,11 +116,23 @@ export function DataChart({ data }: DataChartProps) {
                 color: 'hsl(var(--card-foreground))'
               }}
               labelStyle={{ fontWeight: 'bold' }}
+              labelFormatter={(label) => {
+                try {
+                  return format(parseISO(label), 'PPP');
+                } catch(e) {
+                  return label;
+                }
+              }}
             />
             <Legend />
             <Line type="monotone" dataKey="value" name={selectedKey} stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
+        ) : (
+          <div className="w-full h-96 flex items-center justify-center text-muted-foreground bg-muted/50 rounded-lg">
+            <p>No data to display for the selected metric.</p>
+          </div>
+        )}
       </div>
 
       {isGenerating && (
