@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -15,28 +15,32 @@ interface DataChartProps {
   data: OmoCashflowData[];
 }
 
-const chartableKeys: (keyof OmoCashflowData)[] = [
-  'OMO',
-  'T-Repo',
-  'T-Bill',
-  'OMO+T-Repo',
-  'OMO+T-Repo+T-Bill',
-  'OMO-CUM',
-  'T-Repo-CUM',
-  'T-Bill-CUM',
-  'OMO+T-Repo-CUM',
-  'OMO+T-Repo+T-Bill-CUM',
-];
-
 export function DataChart({ data }: DataChartProps) {
-  const [selectedKey, setSelectedKey] = useState<keyof OmoCashflowData>('OMO');
+  const [selectedKey, setSelectedKey] = useState<string>('');
   const [aiDescription, setAiDescription] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
 
+  const chartableKeys = useMemo(() => {
+    if (data.length === 0) {
+      return [];
+    }
+    const firstItem = data[0];
+    return Object.keys(firstItem).filter(
+      (key) => key !== 'date' && typeof firstItem[key as keyof OmoCashflowData] === 'number'
+    ) as (keyof OmoCashflowData)[];
+  }, [data]);
+
+  useEffect(() => {
+    if (chartableKeys.length > 0 && !selectedKey) {
+      setSelectedKey(chartableKeys[0]);
+    }
+  }, [chartableKeys, selectedKey]);
+
   const chartData = useMemo(() => {
+    if (!selectedKey) return [];
     return data.map(item => ({
       date: item.date,
-      value: item[selectedKey]
+      value: item[selectedKey as keyof OmoCashflowData]
     })).reverse(); // Reverse for chronological order if data is descending by date
   }, [data, selectedKey]);
 
@@ -62,7 +66,7 @@ export function DataChart({ data }: DataChartProps) {
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">Metric:</span>
-          <Select value={selectedKey} onValueChange={(value) => setSelectedKey(value as keyof OmoCashflowData)}>
+          <Select value={selectedKey} onValueChange={(value) => setSelectedKey(value)}>
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="Select a metric" />
             </SelectTrigger>
@@ -73,7 +77,7 @@ export function DataChart({ data }: DataChartProps) {
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={handleGenerateDescription} disabled={isGenerating || data.length === 0}>
+        <Button onClick={handleGenerateDescription} disabled={isGenerating || data.length === 0 || !selectedKey}>
           {isGenerating ? "Analyzing..." : "Generate AI Analysis"}
           <Bot className="ml-2 h-4 w-4" />
         </Button>
