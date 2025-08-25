@@ -108,7 +108,7 @@ export function DataChart({ data }: DataChartProps) {
                 return str;
               }
             }}/>
-            <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(value) => typeof value === 'number' ? value.toLocaleString() : value}/>
+            <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(value) => typeof value === 'number' ? value.toLocaleString() : value} domain={["dataMin", "dataMax"]}/>
             <Tooltip
               contentStyle={{
                 backgroundColor: 'hsl(var(--card))',
